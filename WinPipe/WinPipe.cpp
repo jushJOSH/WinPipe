@@ -99,6 +99,9 @@ bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 		{
 			// If received lenght equal to sent, then everything ok
 			// Else sending message again
+			if (dwRead > MAX_ALLOWED_BUFFER) 
+				throw std::out_of_range("Read more than allowed buffer");
+
 			readBuf[dwRead] = '\0';
 			if (dwRead == 0 && currentRetries++ != Retries || atoi(readBuf) != writeBuf.size())
 			{
