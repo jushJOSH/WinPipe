@@ -4,7 +4,6 @@
 #include <atomic>
 #include <vector>
 #include <thread>
-#include <sstream>
 
 /// <summary>
 /// Splittes string by delimer and create vector of words
