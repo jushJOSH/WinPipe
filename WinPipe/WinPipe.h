@@ -96,7 +96,7 @@ private:
 	// Create message params
 	char customDelimer = ':';
 	unsigned int Delay;
-	unsigned int Retries;
+	unsigned int Retries = 0;
 	unsigned int Messages = 0;
 
 	// Thread params

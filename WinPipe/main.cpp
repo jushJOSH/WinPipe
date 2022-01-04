@@ -1,7 +1,6 @@
 #include <iostream>
 #include "WinPipe.h"
 
-#include <chrono>
 
 using namespace std;
 bool mutex = false;
@@ -31,6 +30,7 @@ void HelloWorld(const std::string& Message)
 
 int main()
 {
+	auto start = chrono::high_resolution_clock::now();
 	// Initializing pipes
 	WinPipe Pipe1("TestChannel", WinPipe::SyncModel::Async);
 	WinPipe Pipe2("TestChannel", WinPipe::SyncModel::Async);
@@ -46,4 +46,9 @@ int main()
 	Pipe2.postMessage("Topic1", "Message2");
 	Pipe1.postMessage("Hello World!", "11111111111");
 	Pipe2.postMessage("Hello World!", "22222222222");
+	auto end = chrono::high_resolution_clock::now();
+
+	printf("%ld", (end - start).count());
+
+	while (true);
 }

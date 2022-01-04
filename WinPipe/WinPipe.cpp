@@ -46,7 +46,7 @@ WinPipe::~WinPipe()
 	while (!stopRequested);
 	while (!threadFinished);
 
-	printf("Destroyed\n");
+//	printf("Destroyed %d\n", Messages);
 
 	DisconnectNamedPipe(PipeHandle);
 	CloseHandle(PipeHandle);
@@ -83,6 +83,7 @@ bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 	char readBuf[256];
 	DWORD dwRead;
 
+	Retries = 0;
 	unsigned int currentRetries = 0;
 	++Messages;
 
@@ -140,7 +141,7 @@ void WinPipe::Loop()
 		}
 	}
 	
-	printf("Finished\n");
+//	printf("Finished %d\n", Messages);
 
 	threadFinished = true;
 }
