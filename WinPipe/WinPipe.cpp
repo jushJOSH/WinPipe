@@ -23,20 +23,31 @@ std::vector<std::string> split(const std::string& msg, char delim)
 	return result;
 }
 
-WinPipe::WinPipe(const std::string& PipeName, SyncModel Model, unsigned int Delay)
-	: PipeName(PipeName), stopRequested(false), Model(Model), Delay(Delay)
+WinPipe::WinPipe(const std::string& PipeName, unsigned int Delay, unsigned int Retries)
+	:	stopRequested(false), threadFinished(false), Delay(Delay), Retries(Retries)
 {
-	if (!tryConnectPipe(PipeName))
-		if (!tryCreatePipe(PipeName))
+	// PipeName init
+	char buf[MAX_ALLOWED_BUFFER];
+	sprintf_s<MAX_ALLOWED_BUFFER>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
+	this->PipeName = std::string(buf);
+
+	// PipeHandle init
+	if (!tryConnectPipe(this->PipeName))
+		if (!tryCreatePipe(this->PipeName))
 			throw std::runtime_error("Error on handling pipe");
 
-	std::thread thr(&WinPipe::Loop, this);
-	thr.detach();
+	// Thread init
+	thread = std::thread(&WinPipe::Loop, this);
+	thread.detach();
 }
 
 WinPipe::~WinPipe()
 {
-	stopRequested = true;
+	// Asking to stop and then waiting
+	requestStop();
+	while (!threadFinished);
+
+	// Closing pipes
 	DisconnectNamedPipe(PipeHandle);
 	CloseHandle(PipeHandle);
 }
@@ -53,6 +64,7 @@ char WinPipe::getCustomDelimer() const
 
 void WinPipe::setPipeName(const std::string& PipeName)
 {
+	// Closing pipe and then create new
 	this->PipeName = PipeName;
 	CloseHandle(PipeHandle);
 
@@ -66,45 +78,81 @@ std::string WinPipe::getPipeName() const
 	return PipeName;
 }
 
-void WinPipe::postMessage(const std::string& Topic, const std::string& Message)
+bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 {
-	Sleep(Delay);
-	std::string fullMessage = Topic + customDelimer + Message;
-	DWORD dwWritten;
+	// Creating message
+	std::string writeBuf = Topic + customDelimer + Message;
 
-	WriteFile(PipeHandle, fullMessage.c_str(), fullMessage.size() + 1, &dwWritten, NULL);
+	// For reading response
+	char readBuf[MAX_ALLOWED_BUFFER];
+	DWORD dwRead;
+
+	// For attempts
+	Retries = 0;
+	unsigned int currentRetries = 0;
+
+	// Sending message to pipe and awaiting response
+	do
+	{
+		TransactNamedPipe(PipeHandle, (LPVOID)writeBuf.c_str(), writeBuf.size(), readBuf, MAX_ALLOWED_BUFFER, &dwRead, NULL);
+	} while ([&]() -> bool
+		{
+			// If received lenght equal to sent, then everything ok
+			// Else sending message again
+			readBuf[dwRead] = '\0';
+			if (dwRead == 0 && currentRetries++ != Retries || atoi(readBuf) != writeBuf.size())
+			{
+				Sleep(Delay);
+				return true;
+			}
+			else return false;
+		}());
+
+	// Return success
+	return dwRead != 0;
 }
 
-void WinPipe::subscribeTopic(const std::string& Topic, std::function<void(const std::string&)> Callback)
+void WinPipe::subscribeTopic(const std::string& Topic,const std::function<void(const std::string&)> &Callback)
 {
 	Callbacks[Topic] = Callback;
 }
 
-void WinPipe::Loop() const
+void WinPipe::Loop()
 {
-	char buf[256];
+	char buf[MAX_ALLOWED_BUFFER];
 	DWORD dwRead;
 
-	ConnectNamedPipe(PipeHandle, NULL);
-	while (!this->isStopRequested())
+	// If stop requested or pipe broken we stop
+	while (!this->isStopRequested() && PipeHandle != INVALID_HANDLE_VALUE)
 	{
+		// While reading from pipe 
 		while (ReadFile(PipeHandle, buf, sizeof(buf) - 1, &dwRead, NULL) != FALSE)
 		{
-			buf[dwRead - 1] = '\0';
-			std::vector<std::string> splitted = split(std::string(buf), customDelimer);
+			buf[dwRead] = '\0';
 
+			// Split message by topic and message. If less than 2 parts than false
+			std::vector<std::string> splitted = split(buf, customDelimer);
+			if (splitted.size() < 2) return;
+
+			// Trying call callback for received topic with received message
+			// on fail catching exception
 			try
 			{
-				std::thread thread(Callbacks.at(splitted[0]), splitted[1]);
-				thread.detach();
+				std::thread thr(Callbacks.at(splitted[0]), std::string(buf));
+				thr.detach();
 			}
 			catch (std::exception& e)
 			{
-				printf("Topic doesnt exist. %s\n", e.what());
+				printf("Topic %s doesnt exist. %s\n", splitted[0].c_str(), e.what());
 			}
+
+			// Sending feedback about received message;
+			_itoa_s(strlen(buf), buf, 10);
+			WriteFile(PipeHandle, buf, strlen(buf), NULL, NULL);
 		}
 	}
-	DisconnectNamedPipe(PipeHandle);
+
+	threadFinished = true;
 }
 
 const std::atomic_bool& WinPipe::isStopRequested() const
@@ -117,60 +165,44 @@ void WinPipe::requestStop()
 	stopRequested = true;
 }
 
-/// <summary>
-/// Trying to create pipe with given pipe name
-/// </summary>
-/// <param name="PipeName"> - Name of pipe</param>
-/// <returns>
-/// Returns true on success, else false
-/// </returns>
 bool WinPipe::tryCreatePipe(const std::string& PipeName)
 {
-	char buf[256];
-	sprintf_s<256>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
-
 	PipeHandle = CreateNamedPipeA(
-		buf,
+		PipeName.c_str(),
 		PIPE_ACCESS_DUPLEX,
-		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | (int)this->Model,   // FILE_FLAG_FIRST_PIPE_INSTANCE is not needed but forces CreateNamedPipe(..) to fail if the pipe already exists...
+		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT,   // FILE_FLAG_FIRST_PIPE_INSTANCE is not needed but forces CreateNamedPipe(..) to fail if the pipe already exists...
 		1,
-		256 * 16,
-		256 * 16,
+		MAX_ALLOWED_BUFFER,
+		MAX_ALLOWED_BUFFER,
 		0,
 		NULL);
 
 	return PipeHandle != INVALID_HANDLE_VALUE;
 }
 
-/// <summary>
-/// Trying to connect with given pipe name
-/// </summary>
-/// <param name="PipeName"> - Name of pipe</param>
-/// <returns>
-/// Returns true on success, else false
-/// </returns>
 bool WinPipe::tryConnectPipe(const std::string& PipeName)
 {
-	char buf[256];
-	sprintf_s<256>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
+	do
+	{
+		PipeHandle = CreateFileA(
+			PipeName.c_str(),			// pipe name 
+			GENERIC_READ |  // read and write access 
+			GENERIC_WRITE,
+			0,              // no sharing 
+			NULL,           // default security attributes
+			OPEN_EXISTING,  // opens existing pipe 
+			0,              // default attributes 
+			NULL);          // no template file 
 
-	PipeHandle = CreateFileA(
-		buf,			// pipe name 
-		GENERIC_READ |  // read and write access 
-		GENERIC_WRITE,
-		0,              // no sharing 
-		NULL,           // default security attributes
-		OPEN_EXISTING,  // opens existing pipe 
-		0,              // default attributes 
-		NULL);          // no template file 
+		// return if pipe invalid
+		if (PipeHandle == INVALID_HANDLE_VALUE)
+			return false;
 
-	// return if pipe invalid
-	if (PipeHandle == INVALID_HANDLE_VALUE)
-		return false;
+	} while (GetLastError() == ERROR_PIPE_BUSY);
 
 	// The pipe connected; change to message-read mode. 
 
-	DWORD dwMode = PIPE_READMODE_MESSAGE | (int)this->Model;
+	DWORD dwMode = PIPE_READMODE_MESSAGE | PIPE_NOWAIT;
 	BOOL fSuccess = SetNamedPipeHandleState(
 		PipeHandle,    // pipe handle 
 		&dwMode,  // new pipe mode 

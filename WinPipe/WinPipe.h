@@ -2,8 +2,11 @@
 #include <string>
 #include <Windows.h>
 #include <functional>
-#include <map>
+#include <unordered_map>
+#include <thread>
 #include <atomic>
+
+#define MAX_ALLOWED_BUFFER 256
 
 /// <summary>
 /// Class to easy managing pipes on win32 systems
@@ -11,18 +14,14 @@
 class WinPipe
 {
 public:
-	enum class SyncModel
-	{
-		Sync, Async
-	};
-
 	/// <summary>
-	/// Constructor of pipe
+	/// Constuctor of pipe
 	/// </summary>
 	/// <param name="PipeName"> - Channel name</param>
-	/// <param name="model"> - Sync or Async model. I thing it doesnt work</param>
-	/// <param name="Delay"> - For waiting messages. Cant make without it</param>
-	WinPipe(const std::string& PipeName, SyncModel model = SyncModel::Async, unsigned int Delay = 1);
+	/// <param name="model"> - Sync or Async model. Sync model doesnt seems to work, use async</param>
+	/// <param name="Delay"> - Delay between retries of sending messages</param>
+	/// <param name="Retries"> - Number of retries</param>
+	WinPipe(const std::string& PipeName, unsigned int Delay = 100, unsigned int Retries = 10);
 	~WinPipe();
 
 	/// <summary>
@@ -55,14 +54,14 @@ public:
 	/// </summary>
 	/// <param name="Topic"> - Theme of message, like id</param>
 	/// <param name="Message"> - Message to be sent</param>
-	void postMessage(const std::string& Topic, const std::string& Message);
+	bool postMessage(const std::string& Topic, const std::string& Message);
 
 	/// <summary>
 	/// Subscribes to topic, and when message with this topic arrives, callbacks
 	/// </summary>
 	/// <param name="Topic"> - Name of topic to subscribe, like id</param>
 	/// <param name="Callback"> - Callback</param>
-	void subscribeTopic(const std::string& Topic, std::function<void(const std::string&)> Callback);
+	void subscribeTopic(const std::string& Topic, const std::function<void(const std::string&)> &Callback);
 
 	/// <summary>
 	/// Whenever the stop requested
@@ -75,19 +74,28 @@ public:
 	/// </summary>
 	void requestStop();
 
+	// Private funcs
 private:
-	std::map<std::string, std::function<void(const std::string&)>> Callbacks;
+	void Loop();
+	bool tryCreatePipe(const std::string& PipeName);
+	bool tryConnectPipe(const std::string& PipeName);
 
+	// Private vars
+private:
+	// Callback map
+	std::unordered_map<std::string, std::function<void(const std::string&)>> Callbacks;
+
+	// Named pipe params
 	std::string PipeName;
 	HANDLE PipeHandle;
 
+	// Create message params
 	char customDelimer = ':';
-	std::atomic<bool> stopRequested;
-
-	SyncModel Model;
 	unsigned int Delay;
+	unsigned int Retries = 0;
 
-	void Loop() const;
-	bool tryCreatePipe(const std::string& PipeName);
-	bool tryConnectPipe(const std::string& PipeName);
+	// Thread params
+	std::thread thread;
+	std::atomic<bool> stopRequested;
+	std::atomic<bool> threadFinished;
 };
