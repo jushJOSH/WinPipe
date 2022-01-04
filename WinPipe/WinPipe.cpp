@@ -138,7 +138,7 @@ void WinPipe::Loop()
 			// on fail catching exception
 			try
 			{
-				std::thread thr(Callbacks.at(splitted[0]), std::string(buf));
+				std::thread thr(Callbacks.at(splitted[0]), splitted[1]);
 				thr.detach();
 			}
 			catch (std::exception& e)
