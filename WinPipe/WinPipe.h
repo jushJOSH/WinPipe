@@ -6,17 +6,14 @@
 #include <thread>
 #include <atomic>
 
+#define MAX_ALLOWED_BUFFER 256
+
 /// <summary>
 /// Class to easy managing pipes on win32 systems
 /// </summary>
 class WinPipe
 {
 public:
-	enum class SyncModel
-	{
-		Sync, Async
-	};
-
 	/// <summary>
 	/// Constuctor of pipe
 	/// </summary>
@@ -24,7 +21,7 @@ public:
 	/// <param name="model"> - Sync or Async model. Sync model doesnt seems to work, use async</param>
 	/// <param name="Delay"> - Delay between retries of sending messages</param>
 	/// <param name="Retries"> - Number of retries</param>
-	WinPipe(const std::string& PipeName, SyncModel model = SyncModel::Async, unsigned int Delay = 100, unsigned int Retries = 10);
+	WinPipe(const std::string& PipeName, unsigned int Delay = 100, unsigned int Retries = 10);
 	~WinPipe();
 
 	/// <summary>
@@ -64,7 +61,7 @@ public:
 	/// </summary>
 	/// <param name="Topic"> - Name of topic to subscribe, like id</param>
 	/// <param name="Callback"> - Callback</param>
-	void subscribeTopic(const std::string& Topic, std::function<void(const std::string&)> Callback);
+	void subscribeTopic(const std::string& Topic, const std::function<void(const std::string&)> &Callback);
 
 	/// <summary>
 	/// Whenever the stop requested
@@ -91,13 +88,11 @@ private:
 	// Named pipe params
 	std::string PipeName;
 	HANDLE PipeHandle;
-	SyncModel Model;
 
 	// Create message params
 	char customDelimer = ':';
 	unsigned int Delay;
 	unsigned int Retries = 0;
-	unsigned int Messages = 0;
 
 	// Thread params
 	std::thread thread;

@@ -32,8 +32,8 @@ int main()
 {
 	auto start = chrono::high_resolution_clock::now();
 	// Initializing pipes
-	WinPipe Pipe1("TestChannel", WinPipe::SyncModel::Async);
-	WinPipe Pipe2("TestChannel", WinPipe::SyncModel::Async);
+	WinPipe Pipe1("TestChannel");
+	WinPipe Pipe2("TestChannel");
 
 	// Subscribing topics to receive messages
 	Pipe1.subscribeTopic("Topic1", Pipe1Callback);
@@ -48,7 +48,5 @@ int main()
 	Pipe2.postMessage("Hello World!", "22222222222");
 	auto end = chrono::high_resolution_clock::now();
 
-	printf("%ld", (end - start).count());
-
-	while (true);
+	printf("\n%ld\n", (end - start).count());
 }
