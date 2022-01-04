@@ -23,20 +23,31 @@ std::vector<std::string> split(const std::string& msg, char delim)
 	return result;
 }
 
-WinPipe::WinPipe(const std::string& PipeName, SyncModel Model, unsigned int Delay)
-	: PipeName(PipeName), stopRequested(false), Model(Model), Delay(Delay)
+WinPipe::WinPipe(const std::string& PipeName, SyncModel Model, unsigned int Delay, unsigned int Retries)
+	:	stopRequested(false), threadFinished(false), Model(Model), Delay(Delay), Retries(Retries)
 {
-	if (!tryConnectPipe(PipeName))
-		if (!tryCreatePipe(PipeName))
+	char buf[256];
+	sprintf_s<256>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
+	this->PipeName = std::string(buf);
+
+	if (!tryConnectPipe(this->PipeName))
+		if (!tryCreatePipe(this->PipeName))
 			throw std::runtime_error("Error on handling pipe");
 
-	std::thread thr(&WinPipe::Loop, this);
-	thr.detach();
+	thread = std::thread(&WinPipe::Loop, this);
+	thread.detach();
 }
 
 WinPipe::~WinPipe()
 {
-	stopRequested = true;
+	requestStop();
+
+	while (Messages);
+	while (!stopRequested);
+	while (!threadFinished);
+
+	printf("Destroyed\n");
+
 	DisconnectNamedPipe(PipeHandle);
 	CloseHandle(PipeHandle);
 }
@@ -66,13 +77,31 @@ std::string WinPipe::getPipeName() const
 	return PipeName;
 }
 
-void WinPipe::postMessage(const std::string& Topic, const std::string& Message)
+bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 {
-	Sleep(Delay);
-	std::string fullMessage = Topic + customDelimer + Message;
-	DWORD dwWritten;
+	std::string writeBuf = Topic + customDelimer + Message;
+	char readBuf[256];
+	DWORD dwRead;
 
-	WriteFile(PipeHandle, fullMessage.c_str(), fullMessage.size() + 1, &dwWritten, NULL);
+	unsigned int currentRetries = 0;
+	++Messages;
+
+	do
+	{
+		TransactNamedPipe(PipeHandle, (LPVOID)writeBuf.c_str(), writeBuf.size(), readBuf, 256, &dwRead, NULL);
+	} while ([&]() -> bool
+		{
+			readBuf[dwRead] = '\0';
+			if (dwRead == 0 && currentRetries++ != Retries && std::string(readBuf) == writeBuf)
+			{
+				Sleep(Delay);
+				return true;
+			}
+			else return false;
+		}());
+
+	--Messages;
+	return dwRead != 0;
 }
 
 void WinPipe::subscribeTopic(const std::string& Topic, std::function<void(const std::string&)> Callback)
@@ -80,31 +109,40 @@ void WinPipe::subscribeTopic(const std::string& Topic, std::function<void(const 
 	Callbacks[Topic] = Callback;
 }
 
-void WinPipe::Loop() const
+void WinPipe::Loop()
 {
 	char buf[256];
 	DWORD dwRead;
 
-	ConnectNamedPipe(PipeHandle, NULL);
-	while (!this->isStopRequested())
+	while (!this->isStopRequested() && PipeHandle != INVALID_HANDLE_VALUE)
 	{
 		while (ReadFile(PipeHandle, buf, sizeof(buf) - 1, &dwRead, NULL) != FALSE)
 		{
-			buf[dwRead - 1] = '\0';
-			std::vector<std::string> splitted = split(std::string(buf), customDelimer);
+			buf[dwRead] = '\0';
 
-			try
-			{
-				std::thread thread(Callbacks.at(splitted[0]), splitted[1]);
-				thread.detach();
-			}
-			catch (std::exception& e)
-			{
-				printf("Topic doesnt exist. %s\n", e.what());
-			}
+			std::thread thr([&](const std::string& readMsg)
+				{
+					std::vector<std::string> splitted = split(readMsg, customDelimer);
+					if (splitted.size() < 2) return;
+
+					try
+					{
+						Callbacks.at(splitted[0])(splitted[1]);
+					}
+					catch (std::exception& e)
+					{
+						printf("Topic doesnt exist. %s\n", e.what());
+					}
+				}, buf);
+			thr.detach();
+
+			WriteFile(PipeHandle, buf, strlen(buf), NULL, NULL);
 		}
 	}
-	DisconnectNamedPipe(PipeHandle);
+	
+	printf("Finished\n");
+
+	threadFinished = true;
 }
 
 const std::atomic_bool& WinPipe::isStopRequested() const
@@ -126,11 +164,8 @@ void WinPipe::requestStop()
 /// </returns>
 bool WinPipe::tryCreatePipe(const std::string& PipeName)
 {
-	char buf[256];
-	sprintf_s<256>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
-
 	PipeHandle = CreateNamedPipeA(
-		buf,
+		PipeName.c_str(),
 		PIPE_ACCESS_DUPLEX,
 		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | (int)this->Model,   // FILE_FLAG_FIRST_PIPE_INSTANCE is not needed but forces CreateNamedPipe(..) to fail if the pipe already exists...
 		1,
@@ -151,22 +186,23 @@ bool WinPipe::tryCreatePipe(const std::string& PipeName)
 /// </returns>
 bool WinPipe::tryConnectPipe(const std::string& PipeName)
 {
-	char buf[256];
-	sprintf_s<256>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
+	do
+	{
+		PipeHandle = CreateFileA(
+			PipeName.c_str(),			// pipe name 
+			GENERIC_READ |  // read and write access 
+			GENERIC_WRITE,
+			0,              // no sharing 
+			NULL,           // default security attributes
+			OPEN_EXISTING,  // opens existing pipe 
+			0,              // default attributes 
+			NULL);          // no template file 
 
-	PipeHandle = CreateFileA(
-		buf,			// pipe name 
-		GENERIC_READ |  // read and write access 
-		GENERIC_WRITE,
-		0,              // no sharing 
-		NULL,           // default security attributes
-		OPEN_EXISTING,  // opens existing pipe 
-		0,              // default attributes 
-		NULL);          // no template file 
+		// return if pipe invalid
+		if (PipeHandle == INVALID_HANDLE_VALUE)
+			return false;
 
-	// return if pipe invalid
-	if (PipeHandle == INVALID_HANDLE_VALUE)
-		return false;
+	} while (GetLastError() == ERROR_PIPE_BUSY);
 
 	// The pipe connected; change to message-read mode. 
 
