@@ -11,7 +11,7 @@ Sure dude youre welcome!
 
 > Is there any problems with it?
 
-[x]Lots of. Starting with 1ms delay for posting messages. Communication with messages, NOWAIT, etc... FIXED
+[X]Lots of. Starting with 1ms delay for posting messages. Communication with messages, NOWAIT, etc... FIXED
 
 
 > Any benefits?
