@@ -1,5 +1,5 @@
 # WinPipe
-Ez pipe for windows. ~~Kinda cringy~~
+## Ez pipe for windows. ~~Kinda cringy~~
 
 Simple tool for IPC. Communicating trough messages with topics, similar to MQTT.
 
