@@ -9,11 +9,11 @@ Sure dude youre welcome!
 
 > Is there any problems with it?
 
-I think execution time is the only limit (4.5ms for init 2 pipes, subscribe topics, and send 6 messages. Like in main.cpp example)
+I think execution time is the only limit (~6.5ms for init 2 pipes, subscribe topics, and send 6 messages. Like in main.cpp example. I think its alot)
 
 > Any benefits?
 
-Sure, multithreaded read mechanism, async read/write, buffer limitation (if needed), Publisher - Subscriber system, and many more!
+Sure, multithreaded read mechanism, async read/write, buffer limitation (if needed), Publisher - Subscriber system, etc...
 
 # Easy start
 Start with include 
