@@ -4,13 +4,15 @@
 Simple tool for IPC. Communicating trough messages with topics, similar to MQTT.
 
 > Aye aint it super cool and thank you?
+
 Sure dude youre welcome!
 
-
 > Is there any problems with it?
+
 I think only execution time is the only limit (4.5ms for init 2 pipes, subscribe topics, and send 6 messages. Like in main.cpp example)
 
 > Any benefits?
+
 Sure, multithreaded read mechanism, async read/write, buffer limitation (if needed), Publisher - Subscriber system, and many more!
 
 # Easy start
