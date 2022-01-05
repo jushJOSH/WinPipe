@@ -9,7 +9,7 @@ Sure dude youre welcome!
 
 > Is there any problems with it?
 
-I think only execution time is the only limit (4.5ms for init 2 pipes, subscribe topics, and send 6 messages. Like in main.cpp example)
+I think execution time is the only limit (4.5ms for init 2 pipes, subscribe topics, and send 6 messages. Like in main.cpp example)
 
 > Any benefits?
 
