@@ -43,7 +43,7 @@ int main()
 
 This allows to receive messages. To send messages to topic, try something like...
 ```
-// Topic2 - where we want to send id
+// Topic2 - where we want to send it
 // Message - message itself
 pipe.postMessage("Topic2", "Message");
 ```
