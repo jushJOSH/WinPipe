@@ -3,6 +3,8 @@
 
 Simple tool for IPC. Communicating trough messages with topics, similar to MQTT.
 
+<a href="https://github.com/jushJOSH/WinPipe/blob/master/LICENSE"><img alt="GitHub license" src="https://img.shields.io/github/license/jushJOSH/WinPipe"></a>
+
 > Aye aint it super cool and thank you?
 
 Sure dude youre welcome!
