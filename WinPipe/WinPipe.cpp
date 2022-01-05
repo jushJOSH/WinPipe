@@ -5,26 +5,8 @@
 #include <vector>
 #include <thread>
 
-/// <summary>
-/// Splittes string by delimer and create vector of words
-/// </summary>
-/// <param name="msg"> - Text to tokenize</param>
-/// <param name="delim"> - Delimer</param>
-/// <returns>Vector of word, which was separated by delimer</returns>
-std::vector<std::string> split(const std::string& msg, char delim)
-{
-	std::vector<std::string> result;
-	std::stringstream msgStream(msg);
-	std::string msgToken;
-
-	while (std::getline(msgStream, msgToken, delim))
-		result.push_back(msgToken);
-
-	return result;
-}
-
 WinPipe::WinPipe(const std::string& PipeName, unsigned int Delay, unsigned int Retries)
-	:	stopRequested(false), threadFinished(false), Delay(Delay), Retries(Retries)
+	: stopRequested(false), threadFinished(false), Delay(Delay), Retries(Retries)
 {
 	// PipeName init
 	char buf[MAX_ALLOWED_BUFFER];
@@ -99,10 +81,9 @@ bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 		{
 			// If received lenght equal to sent, then everything ok
 			// Else sending message again
-			if (dwRead > MAX_ALLOWED_BUFFER) 
-				throw std::out_of_range("Read more than allowed buffer");
+			if (dwRead < MAX_ALLOWED_BUFFER)
+				readBuf[dwRead] = '\0';
 
-			readBuf[dwRead] = '\0';
 			if (dwRead == 0 && currentRetries++ != Retries || atoi(readBuf) != writeBuf.size())
 			{
 				Sleep(Delay);
@@ -115,7 +96,7 @@ bool WinPipe::postMessage(const std::string& Topic, const std::string& Message)
 	return dwRead != 0;
 }
 
-void WinPipe::subscribeTopic(const std::string& Topic,const std::function<void(const std::string&)> &Callback)
+void WinPipe::subscribeTopic(const std::string& Topic, const std::function<void(const std::string&)>& Callback)
 {
 	Callbacks[Topic] = Callback;
 }
@@ -128,31 +109,38 @@ void WinPipe::Loop()
 	// If stop requested or pipe broken we stop
 	while (!this->isStopRequested() && PipeHandle != INVALID_HANDLE_VALUE)
 	{
+		std::string recvMessage;
 		// While reading from pipe 
-		while (ReadFile(PipeHandle, buf, sizeof(buf) - 1, &dwRead, NULL) != FALSE)
+		while (ReadFile(PipeHandle, buf, sizeof(buf) - 1, &dwRead, NULL) != FALSE || GetLastError() == ERROR_MORE_DATA)
 		{
 			buf[dwRead] = '\0';
-
-			// Split message by topic and message. If less than 2 parts than false
-			std::vector<std::string> splitted = split(buf, customDelimer);
-			if (splitted.size() < 2) return;
-
-			// Trying call callback for received topic with received message
-			// on fail catching exception
-			try
-			{
-				std::thread thr(Callbacks.at(splitted[0]), splitted[1]);
-				thr.detach();
-			}
-			catch (std::exception& e)
-			{
-				printf("Topic %s doesnt exist. %s\n", splitted[0].c_str(), e.what());
-			}
-
-			// Sending feedback about received message;
-			_itoa_s(strlen(buf), buf, 10);
-			WriteFile(PipeHandle, buf, strlen(buf), NULL, NULL);
+			recvMessage += buf;
 		}
+
+		if (recvMessage.empty())
+			continue;
+
+		// Split message by topic and message.
+		size_t delimer = recvMessage.find_first_of(customDelimer);
+		std::string
+			topic = recvMessage.substr(0, delimer),
+			message = recvMessage.substr(delimer + 1, recvMessage.size() - delimer);
+
+		// Trying call callback for received topic with received message
+		// on fail catching exception
+		try
+		{
+			std::thread thr(Callbacks.at(topic), message);
+			thr.detach();
+		}
+		catch (std::exception& e)
+		{
+			printf("Topic %s doesnt exist. %s\n", topic.c_str(), e.what());
+		}
+
+		// Sending feedback about received message;
+		_itoa_s(strlen(buf), buf, 10);
+		WriteFile(PipeHandle, buf, strlen(buf), NULL, NULL);
 	}
 
 	threadFinished = true;

@@ -61,7 +61,7 @@ public:
 	/// </summary>
 	/// <param name="Topic"> - Name of topic to subscribe, like id</param>
 	/// <param name="Callback"> - Callback</param>
-	void subscribeTopic(const std::string& Topic, const std::function<void(const std::string&)> &Callback);
+	void subscribeTopic(const std::string& Topic, const std::function<void(const std::string&)>& Callback);
 
 	/// <summary>
 	/// Whenever the stop requested
