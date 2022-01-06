@@ -1,6 +1,5 @@
 #include <iostream>
 #include "WinPipe.h"
-#include <chrono>
 
 using namespace std;
 bool mutex = false;

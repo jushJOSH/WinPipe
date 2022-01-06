@@ -46,10 +46,13 @@ char WinPipe::getCustomDelimer() const
 
 void WinPipe::setPipeName(const std::string& PipeName)
 {
-	// Closing pipe and then create new
-	this->PipeName = PipeName;
-	CloseHandle(PipeHandle);
+	// PipeName init
+	char buf[MAX_ALLOWED_BUFFER];
+	sprintf_s<MAX_ALLOWED_BUFFER>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
+	this->PipeName = std::string(buf);
 
+	// Closing pipe and then create new
+	CloseHandle(PipeHandle);
 	if (!tryConnectPipe(PipeName))
 		if (!tryCreatePipe(PipeName))
 			throw std::runtime_error("Error on handling pipe");
