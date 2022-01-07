@@ -9,9 +9,7 @@ WinPipe::WinPipe(const std::string& PipeName, unsigned int Delay, unsigned int R
 	: stopRequested(false), threadFinished(false), Delay(Delay), Retries(Retries)
 {
 	// PipeName init
-	char buf[MAX_ALLOWED_BUFFER];
-	sprintf_s<MAX_ALLOWED_BUFFER>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
-	this->PipeName = std::string(buf);
+	this->PipeName = "\\\\.\\pipe\\" + PipeName;
 
 	// PipeHandle init
 	if (!tryConnectPipe(this->PipeName))
@@ -47,9 +45,7 @@ char WinPipe::getCustomDelimer() const
 void WinPipe::setPipeName(const std::string& PipeName)
 {
 	// PipeName init
-	char buf[MAX_ALLOWED_BUFFER];
-	sprintf_s<MAX_ALLOWED_BUFFER>(buf, "\\\\.\\pipe\\%s", PipeName.c_str());
-	this->PipeName = std::string(buf);
+	this->PipeName = "\\\\.\\pipe\\" + PipeName;
 
 	// Closing pipe and then create new
 	CloseHandle(PipeHandle);
