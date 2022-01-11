@@ -58,5 +58,6 @@ If you need to reduce or extend buffer size (default 256 per received message), 
 
 **Note what every callback runs in _different_ thread**
 
-Help appreciated
+Help appreciated.
+
 Feel free to open issues, if needed ofc
